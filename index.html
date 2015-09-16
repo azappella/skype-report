@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Skype Report</title>
+  <link rel="stylesheet" href="components/bootstrap/dist/css/bootstrap.min.css">
+</head>
+<body>
+  <div class="container">
+    <div class="row">
+      <div class="table-container col-sm-12">
+        <h2>Skype Report</h2>
+        <input type="file" id="file-input">
+        <table class="table table-hover">
+          <thead id="thead">
+            <tr id="table-header">
+              <th>Name</th>
+              <th>Calls</th>
+              <th>Minutes</th>
+              <th>Avg. Call (secs)</th>
+              <th>Call w/o Answer</th>
+              <th>Cost</th>
+            </tr>
+          </thead>
+          <tbody id="tbody">
+          </tbody>
+        </table>
+      </div>
+      <!-- .table-container -->
+    </div>
+    <!-- .row -->
+  </div>
+  <!-- .container -->
+  <script type="text/template" id="td-tmpl">
+    <td><%- name %></td>
+    <td><%- data.calls %></td>
+    <td><%- data.minutes %></td>
+    <td><%- data.avgCallDuration %></td>
+    <td><%- data.noAnswers %></td>
+    <td><%- data.Amount %></td>
+  </script>
+  <script src="components/jquery/dist/jquery.min.js"></script>
+  <script src="components/underscore/underscore-min.js"></script>
+  <script src="components/backbone/backbone-min.js"></script>
+  <script src="components/papaparse/papaparse.min.js"></script>
+  <script>
+
+    (function(){
+      function Member(obj) {
+        var keysAssoc = {
+          'Skype Name': 'username',
+          'Member': 'name',
+          'Email': 'email',
+          'Group': 'group',
+          'Date': 'date',
+          'Item': 'dialed',
+          'Destination': 'detination',
+          'Type': 'type',
+          'Rate/min.': 'ratePerMin',
+          'Duration': 'duration',
+          'Amount': 'amount'
+        };
+        var validKeys = ['username', 'name', 'email', 'group'];
+
+        this.calls = 0;
+        this.noAnswers = 0;
+        this.seconds = 0;
+
+        for (prop in obj) {
+          this[prop] = obj[prop];
+          if (validKeys.indexOf(keysAssoc[prop]) !== -1) {
+            this[keysAssoc[prop]] = obj[prop];
+          }
+        }
+      }
+
+      var Caller = Backbone.Model.extend({
+        initialize: function(options){
+          console.log(options);
+        },
+        name: function(){
+          return this.get('name');
+        }
+      });
+
+      var Callers = Backbone.Collection.extend({
+        model: Caller,
+        comparator: function( collection ){
+          return( -collection.get( 'data' ).calls );
+        }
+      });
+
+      var ReportView = Backbone.View.extend({
+        el: 'body',
+        initialize: function(options){
+          this.callers = options.callers;
+        },
+        events: {
+          'change #file-input': 'parseCsv'
+        },
+        parseCsv: function(e){
+          var file = e.target.files[0];
+          Papa.parse(file, {
+            header: true,
+            complete: _.bind(this.onComplete, this)
+          });
+        },
+        onComplete: function(results) {
+          var _members = [];
+          var callers = [];
+          results.data.forEach(function(line, i){
+
+            if (typeof line.Amount !== "undefined") {
+              line.Amount = parseFloat(stripCurrency(line.Amount));
+            }
+
+            if (typeof line['Rate/min.'] !== "undefined") {
+              line['Rate/min.'] = parseFloat(stripCurrency(line['Rate/min.']));
+            }
+              
+            if (_members.indexOf(line.Member) === -1) {
+              _members.push(line.Member);
+              callers.push({name: line.Member, data: new Member(line)});
+            } else {
+              callers.forEach(function(caller, i){
+                if (line.Member === caller.name) {
+                  caller.data.Amount = caller.data.Amount + line.Amount;
+                  caller.data.calls = caller.data.calls + 1;
+                  if (line.Duration === '00:00:00') {
+                    caller.data.noAnswers = caller.data.noAnswers + 1;
+                  } else {
+                    var a = line.Duration.split(':'); 
+                    var seconds = (+a[0]) * 60 * 60 + (+a[1]) * 60 + (+a[2]);
+                    caller.data.seconds = caller.data.seconds + seconds;
+                    caller.data.minutes = caller.data.seconds / 60;
+                    caller.data.avgCallDuration = caller.data.seconds / caller.data.calls;
+                  }
+                }
+              });
+            }
+          });
+          this.callers.reset(callers);
+          this.render();
+        },
+        render: function(){
+          tableRowView = new TableRow({el: '#tbody', collection: this.callers}).render();
+        }
+      });
+      
+      var TableRow = Backbone.View.extend({
+        initialize: function(options){
+
+        },
+        template: _.template('<tr><%- name %></tr>'),
+        render: function(){
+          var rows = [];
+          this.collection.each(function(model, i){
+            rows.push((new TableItem({model: model})).render().el);
+          });
+          this.$el.html(rows);
+          return this;
+        }
+      });
+
+      var TableItem = Backbone.View.extend({
+        tagName: 'tr',
+        template: _.template($('#td-tmpl').html()),
+        render: function(){
+          this.$el.html(this.template(this.model.toJSON()));
+          return this;
+        }
+      });
+
+      // Remove currency symbols to be able to compute totals, remove remaining
+      // starting dot for certain currencies. 
+      function stripCurrency(value) {
+        return value.toString().replace(/[^0-9\.]+/g,'').replace(/^[\.]/,'');
+      }
+
+      function init() {
+        var reportView = new ReportView({callers: new Callers()});
+      }
+      
+      init();
+
+    })();
+
+  </script>
+</body>
+</html>

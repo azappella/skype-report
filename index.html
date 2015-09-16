@@ -123,7 +123,7 @@
               _members.push(line.Member);
               callers.push({name: line.Member, data: new Member(line)});
             } else {
-              var caller = _.where(callers, {name: line.Member})[0];
+              var caller = _.findWhere(callers, {name: line.Member});
               caller.data.Amount = caller.data.Amount + line.Amount;
               caller.data.calls = caller.data.calls + 1;
               if (line.Duration === '00:00:00') {

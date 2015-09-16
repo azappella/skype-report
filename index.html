@@ -43,6 +43,7 @@
   <script src="components/underscore/underscore-min.js"></script>
   <script src="components/backbone/backbone-min.js"></script>
   <script src="components/papaparse/papaparse.min.js"></script>
+  <script src="components/polyfills/array.filter.js"></script>
   <script>
 
     (function(){
@@ -76,7 +77,7 @@
 
       var Caller = Backbone.Model.extend({
         initialize: function(options){
-          console.log(options);
+          // console.log(options);
         },
         name: function(){
           return this.get('name');
@@ -122,21 +123,18 @@
               _members.push(line.Member);
               callers.push({name: line.Member, data: new Member(line)});
             } else {
-              callers.forEach(function(caller, i){
-                if (line.Member === caller.name) {
-                  caller.data.Amount = caller.data.Amount + line.Amount;
-                  caller.data.calls = caller.data.calls + 1;
-                  if (line.Duration === '00:00:00') {
-                    caller.data.noAnswers = caller.data.noAnswers + 1;
-                  } else {
-                    var a = line.Duration.split(':'); 
-                    var seconds = (+a[0]) * 60 * 60 + (+a[1]) * 60 + (+a[2]);
-                    caller.data.seconds = caller.data.seconds + seconds;
-                    caller.data.minutes = caller.data.seconds / 60;
-                    caller.data.avgCallDuration = caller.data.seconds / caller.data.calls;
-                  }
-                }
-              });
+              var caller = _.where(callers, {name: line.Member})[0];
+              caller.data.Amount = caller.data.Amount + line.Amount;
+              caller.data.calls = caller.data.calls + 1;
+              if (line.Duration === '00:00:00') {
+                caller.data.noAnswers = caller.data.noAnswers + 1;
+              } else {
+                var a = line.Duration.split(':'); 
+                var seconds = (+a[0]) * 60 * 60 + (+a[1]) * 60 + (+a[2]);
+                caller.data.seconds = caller.data.seconds + seconds;
+                caller.data.minutes = caller.data.seconds / 60;
+                caller.data.avgCallDuration = caller.data.seconds / caller.data.calls;
+              }
             }
           });
           this.callers.reset(callers);
@@ -148,9 +146,6 @@
       });
       
       var TableRow = Backbone.View.extend({
-        initialize: function(options){
-
-        },
         template: _.template('<tr><%- name %></tr>'),
         render: function(){
           var rows = [];
